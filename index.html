@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f8f6f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="description" content="Live Pomodoro Status">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Moritz Status</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f8f6f1;--surface:#ffffff;--surface-2:#f0ede6;--border:#e0ddd4;--text:#1a1a1e;--dim:#6a6a78;--dim2:#9a9aa4;--accent:#3eba6f;--accent-glow:rgba(62,186,111,0.08);--red:#c82533;--red-soft:#d44;--red-glow:rgba(200,37,51,0.06);--yellow:#b08820;--blue:#3080c0;--radius:16px;--radius-sm:10px;--shadow:0 1px 3px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04)}
+  *{margin:0;padding:0;box-sizing:border-box}html{height:100%}
+  body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100%;min-height:100dvh;display:flex;align-items:flex-start;justify-content:center;padding:1.2rem;-webkit-font-smoothing:antialiased}
+  .app{width:100%;max-width:420px;padding-top:.5rem}
+  .header{text-align:center;margin-bottom:.8rem}
+  .header h1{font-family:'JetBrains Mono',monospace;font-size:.5rem;letter-spacing:.25em;text-transform:uppercase;color:var(--dim2);margin-bottom:.1rem}
+  .header .subtitle{font-size:.6rem;color:var(--dim)}
+  .status-card{background:var(--surface);border-radius:var(--radius);padding:1.1rem;box-shadow:0 2px 8px rgba(0,0,0,.025),0 8px 28px rgba(0,0,0,.045);border:1.5px solid var(--border);margin-bottom:.6rem;transition:all .5s}
+  .status-card.running{border-color:var(--accent);background:rgba(62,186,111,.02)}
+  .status-card.paused{border-color:var(--yellow)}
+  .status-card.completed{border-color:var(--accent)}
+  .status-card.break{border-color:var(--blue)}
+  .status-card.working{border-color:var(--blue);background:rgba(48,128,192,.02)}
+  .status-card.sleeping{border-color:var(--yellow);background:rgba(176,136,32,.02)}
+  .status-card.idle.shaming{border-color:var(--red);background:var(--red-glow);animation:shameCardPulse 1.5s ease-in-out infinite}
+  .status-card.offline{border-color:var(--border);opacity:.6}
+  .status-card.disconnected{border-color:var(--yellow)}
+  @keyframes shameCardPulse{0%,100%{box-shadow:var(--shadow)}50%{box-shadow:0 0 20px rgba(200,37,51,.12),var(--shadow)}}
+  .status-indicator{display:flex;align-items:center;gap:.5rem}
+  .status-dot{width:10px;height:10px;border-radius:50%;background:var(--dim2);flex-shrink:0;transition:background .3s}
+  .running .status-dot{background:var(--accent);box-shadow:0 0 8px var(--accent-glow);animation:pulse 2s infinite}
+  .paused .status-dot{background:var(--yellow);animation:pulse 3s infinite}
+  .completed .status-dot{background:var(--accent)}.break .status-dot{background:var(--blue)}
+  .working .status-dot{background:var(--blue);animation:pulse 2s infinite}
+  .sleeping .status-dot{background:var(--yellow)}
+  .idle .status-dot{background:var(--dim2)}
+  .idle.shaming .status-dot{background:var(--red);animation:shamePulse .8s infinite}
+  .offline .status-dot{background:#ccc}.disconnected .status-dot{background:var(--yellow);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes shamePulse{0%,100%{opacity:1;box-shadow:0 0 12px rgba(200,37,51,.5)}50%{opacity:.4;box-shadow:none}}
+  .status-label{font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  .running .status-label{color:var(--accent)}.paused .status-label{color:var(--yellow)}
+  .break .status-label{color:var(--blue)}.working .status-label{color:var(--blue)}.sleeping .status-label{color:var(--yellow)}
+  .idle.shaming .status-label{color:var(--red)}.disconnected .status-label{color:var(--yellow)}
+  .task-name{font-size:1.3rem;font-weight:700;margin-bottom:.4rem;min-height:1.8rem;transition:color .3s}
+  .timer-display{font-family:'JetBrains Mono',monospace;font-size:2.6rem;font-weight:700;letter-spacing:-.02em;color:var(--text);margin-bottom:.4rem;min-height:3rem;transition:opacity .3s}
+  .timer-display.inactive{opacity:.15;font-size:1.8rem}
+  .timer-end{font-family:'JetBrains Mono',monospace;font-size:.55rem;color:var(--dim);letter-spacing:.04em;min-height:.8rem}
+  .location-row{display:flex;align-items:center;gap:.3rem;font-family:'JetBrains Mono',monospace;font-size:.48rem;color:var(--dim2);letter-spacing:.04em}
+  .location-icon{font-size:.6rem}
+  .shame-banner{display:none;background:var(--red-glow);border:1.5px solid var(--red);border-radius:var(--radius);padding:.7rem .8rem;margin-bottom:.6rem;text-align:center;animation:shameBannerPulse 1.5s ease-in-out infinite}
+  .shame-banner.active{display:block}
+  .shame-banner-title{font-family:'JetBrains Mono',monospace;font-size:.46rem;font-weight:700;color:var(--red);letter-spacing:.12em;text-transform:uppercase;margin-bottom:.1rem}
+  .shame-banner-time{font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700;color:var(--red);letter-spacing:-.02em}
+  .shame-banner-sub{font-size:.58rem;color:var(--dim);margin-top:.15rem;line-height:1.4}
+  .shame-banner-total{font-family:'JetBrains Mono',monospace;font-size:.44rem;color:var(--red);opacity:.6;margin-top:.2rem;letter-spacing:.06em}
+  @keyframes shameBannerPulse{0%,100%{border-color:var(--red);transform:scale(1)}50%{border-color:rgba(200,37,51,.3);transform:scale(1.005)}}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.4rem;margin-bottom:.8rem}
+  .stat-box{background:var(--surface);border-radius:var(--radius-sm);padding:.6rem .5rem;box-shadow:var(--shadow);border:1px solid var(--border);text-align:center;transition:transform .12s ease,box-shadow .15s}
+  .stat-box:active{transform:scale(.96)}
+  .stat-value{font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:700;color:var(--text)}
+  .stat-label{font-size:.52rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-top:.1rem}
+  .goal-section{margin-bottom:.8rem;background:var(--surface);border-radius:var(--radius-sm);padding:.65rem .9rem;box-shadow:var(--shadow);border:1px solid var(--border)}
+  .goal-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem}
+  .goal-label{font-family:'JetBrains Mono',monospace;font-size:.45rem;color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+  .goal-value{font-family:'JetBrains Mono',monospace;font-size:.48rem;color:var(--dim)}.goal-value .gv{color:var(--text);font-weight:700;font-size:.52rem}.goal-value .gdone{color:var(--accent)}
+  .goal-track{height:5px;background:var(--surface-2);border-radius:4px;overflow:hidden;position:relative}
+  .goal-fill{height:100%;border-radius:4px;transition:width .8s cubic-bezier(.16,1,.3,1),background .3s}
+  .goal-fill.under{background:linear-gradient(90deg,#35a060,var(--accent))}.goal-fill.done{background:linear-gradient(90deg,#a07818,var(--yellow));box-shadow:0 0 8px rgba(176,136,32,0.15)}
+  .goal-milestone{position:absolute;top:-1px;width:2px;height:7px;background:var(--dim2);border-radius:1px;opacity:.3}.goal-milestone.hit{background:var(--yellow);opacity:.7}
+  .rank-row{display:flex;align-items:center;justify-content:center;gap:.4rem;margin-bottom:.6rem;flex-wrap:wrap}
+  .rank-icon{font-size:1.1rem}.rank-name{font-family:'JetBrains Mono',monospace;font-size:.58rem;font-weight:700;color:var(--accent);letter-spacing:.06em;text-transform:uppercase}
+  .rank-xp{font-family:'JetBrains Mono',monospace;font-size:.42rem;color:var(--dim2)}
+  .streak-badge{font-family:'JetBrains Mono',monospace;font-size:.5rem;color:var(--yellow);background:rgba(176,136,32,0.08);padding:2px 7px;border-radius:4px;border:1px solid rgba(176,136,32,0.2)}
+  .shield-badge{font-family:'JetBrains Mono',monospace;font-size:.5rem;color:var(--yellow);letter-spacing:.1em}
+  .footer{text-align:center;padding-top:.3rem}.last-update{font-family:'JetBrains Mono',monospace;font-size:.44rem;color:var(--dim2);letter-spacing:.04em}
+  .tab-bar{display:flex;margin-bottom:.6rem;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border);overflow:hidden}
+  .tab-bar button{flex:1;border:none;background:transparent;font-family:'JetBrains Mono',monospace;font-size:.5rem;padding:.55rem;color:var(--dim);cursor:pointer;transition:all .2s;letter-spacing:.06em}
+  .tab-bar button.active{background:rgba(62,186,111,.06);color:var(--accent);font-weight:700;box-shadow:inset 0 -2.5px 0 var(--accent)}
+  .tab-view{display:none}.tab-view.active{display:block}
+  .stat-section{background:var(--surface);border-radius:var(--radius-sm);padding:.65rem .8rem;border:1px solid var(--border);margin-bottom:.6rem}
+  .stat-label{font-family:'JetBrains Mono',monospace;font-size:.42rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:.4rem;font-weight:500}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.3rem;margin-bottom:.4rem}
+  .stat-card{background:var(--surface-2);border-radius:8px;padding:.45rem .35rem;text-align:center;border:1px solid var(--border);transition:transform .12s ease}
+  .stat-card:active{transform:scale(.96)}
+  .stat-card .sv{font-family:'JetBrains Mono',monospace;font-size:.55rem;font-weight:700;color:var(--text)}
+  .stat-card .sl{font-family:'JetBrains Mono',monospace;font-size:.42rem;color:var(--dim)}
+  .stat-card .sv.green{color:var(--accent)}.stat-card .sv.red{color:var(--red-soft)}.stat-card .sv.yellow{color:var(--yellow)}.stat-card .sv.blue{color:var(--blue)}
+  .range-picker{display:flex;gap:.25rem;margin-bottom:.5rem}
+  .range-picker button{border:1px solid var(--border);background:transparent;border-radius:20px;font-family:'JetBrains Mono',monospace;font-size:.42rem;padding:.2rem .55rem;color:var(--dim);cursor:pointer}
+  .range-picker button.active{border-color:var(--accent);background:rgba(62,186,111,.08);color:var(--accent);font-weight:700}
+  .heatmap-grid{display:grid;gap:2px;margin-bottom:.3rem;grid-auto-flow:column}
+  .heatmap-cell{border-radius:2px;aspect-ratio:1}
+  .hour-chart{display:flex;gap:1px;height:50px;align-items:flex-end;margin-bottom:.2rem}
+  .hour-bar{flex:1;border-radius:2px 2px 0 0;min-height:1px;transition:height .3s}
+  .bar-chart-wrap{position:relative;height:100px;display:flex;gap:1px;align-items:flex-end}
+  .bar-chart-wrap .bar{flex:1;border-radius:2px 2px 0 0;min-height:1px}
+  .bar-chart-wrap .goal-line{position:absolute;left:0;right:0;height:1px;border-top:1px dashed var(--yellow);opacity:.5}
+  .task-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:1px;margin-bottom:.35rem}
+  .task-bar div{min-width:2px}
+  .task-row{display:flex;align-items:center;gap:.3rem;font-family:'JetBrains Mono',monospace;font-size:.42rem;padding:.1rem 0}
+  .task-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+  .conn-banner{text-align:center;font-size:.65rem;padding:.45rem;border-radius:var(--radius-sm);margin-bottom:.8rem;display:none}
+  .conn-banner.error{display:block;background:rgba(200,37,51,0.06);color:var(--red);border:1px solid rgba(200,37,51,0.15)}
+  .conn-banner.connecting{display:block;background:rgba(176,136,32,0.06);color:var(--yellow);border:1px solid rgba(176,136,32,0.15)}
+  .notif-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.65rem .9rem;margin-bottom:.8rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem;box-shadow:var(--shadow)}
+  .notif-bar.hidden{display:none}.notif-text{font-size:.7rem;color:var(--dim)}
+  .notif-btn{font-family:'DM Sans',sans-serif;font-size:.65rem;font-weight:600;background:var(--accent);color:#fff;border:none;padding:.35rem .7rem;border-radius:6px;cursor:pointer;white-space:nowrap}.notif-btn:active{opacity:.8}
+  .timeline-section{background:var(--surface);border-radius:var(--radius-sm);padding:.7rem .9rem;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:.8rem}
+  .timeline-title{font-family:'JetBrains Mono',monospace;font-size:.45rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2);margin-bottom:.5rem}
+  .timeline-bar{position:relative;height:16px;background:var(--surface-2);border-radius:4px;overflow:visible}
+  .timeline-seg{position:absolute;height:100%;border-radius:2px;opacity:.85;min-width:2px}
+  .timeline-hours{position:relative;height:12px;margin-top:2px}
+  .timeline-hour{position:absolute;font-family:'JetBrains Mono',monospace;font-size:.32rem;color:var(--dim2);transform:translateX(-50%)}
+  .nudge-section{margin-bottom:.6rem}
+  .nudge-row{display:flex;gap:.3rem;align-items:center}
+  .nudge-input{flex:1;font-family:'JetBrains Mono',monospace;font-size:.55rem;padding:.45rem .5rem;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);box-sizing:border-box;min-width:0}
+  .nudge-btn-compact,.sos-btn-compact{width:42px;height:42px;font-size:1rem;border-radius:10px;border:1.5px solid;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .nudge-btn-compact{border-color:var(--red-soft);background:rgba(200,37,51,.03);color:var(--red)}
+  .nudge-btn-compact:active{background:var(--red);transform:scale(.93)}
+  .nudge-btn-compact:disabled,.sos-btn-compact:disabled{opacity:.4;pointer-events:none}
+  .sos-btn-compact{border-color:#8b0000;background:rgba(139,0,0,.04);color:#8b0000}
+  .sos-btn-compact:active{background:#8b0000;transform:scale(.93)}
+  .nudge-btn{font-family:'JetBrains Mono',monospace;font-size:.55rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.5rem;border:1.5px solid var(--red-soft);background:rgba(200,37,51,.03);color:var(--red);border-radius:10px;cursor:pointer;transition:all .12s;width:100%}
+  .nudge-btn:active{background:var(--red);color:#fff;transform:scale(.97)}
+  .sos-btn{font-family:'JetBrains Mono',monospace;font-size:.55rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.5rem;border:1.5px solid #8b0000;background:rgba(139,0,0,.04);color:#8b0000;border-radius:10px;cursor:pointer;transition:all .12s;width:100%}
+  .sos-btn:active{background:#8b0000;color:#fff;transform:scale(.97)}
+  .approval-banner{display:none;background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--radius);padding:.7rem;margin-bottom:.6rem;box-shadow:0 2px 12px rgba(62,186,111,.06)}
+  .approval-banner.active{display:block}
+  .approval-text{font-family:'JetBrains Mono',monospace;font-size:.5rem;color:var(--red);margin-bottom:.5rem;text-align:center;font-weight:600}
+  .section-label{font-family:'JetBrains Mono',monospace;font-size:.4rem;color:var(--dim2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem;text-align:center}
+  .freimin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.25rem;margin-bottom:.4rem}
+  .freimin-btn{font-family:'JetBrains Mono',monospace;font-size:.6rem;font-weight:700;padding:.5rem .2rem;border-radius:8px;border:1.5px solid var(--accent);background:rgba(62,186,111,.04);color:var(--accent);cursor:pointer;transition:all .1s;text-align:center}
+  .freimin-btn:active{background:var(--accent);color:#fff;transform:scale(.95)}
+  .freimin-custom{display:flex;gap:.25rem;align-items:center;margin-bottom:.4rem}
+  .freimin-input{width:48px;font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:.4rem;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);text-align:center}
+  .freimin-select{flex:1;font-family:'JetBrains Mono',monospace;font-size:.52rem;padding:.4rem .3rem;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24'%3E%3Cpath fill='%236a6a78' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .35rem center;padding-right:1.2rem}
+  .freimin-ok{padding:.4rem .55rem!important;border-width:1.5px}
+  .deny-btn-subtle{display:block;width:100%;font-family:'JetBrains Mono',monospace;font-size:.42rem;color:var(--dim2);background:none;border:none;padding:.3rem;cursor:pointer;text-align:center;letter-spacing:.04em}
+  .deny-btn-subtle:active{color:var(--red)}
+  .approve-btn{background:rgba(62,186,111,.06);border-color:var(--accent);color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:.58rem;font-weight:700;padding:.5rem .3rem;border-radius:8px;cursor:pointer;border:1.5px solid var(--accent);transition:all .12s}
+  .approve-btn:active{background:var(--accent);color:#fff;transform:scale(.96)}
+  .deny-btn{background:rgba(200,37,51,.03);border-color:var(--border);color:var(--dim);font-family:'JetBrains Mono',monospace;border-radius:8px;cursor:pointer;transition:all .12s}
+  .deny-btn:active{background:var(--red);color:#fff}
+  .approval-btns{display:flex;gap:.4rem}
+  .approval-btns button{flex:1;font-family:'JetBrains Mono',monospace;font-size:.55rem;font-weight:600;padding:.4rem .2rem;border-radius:8px;cursor:pointer;border:1px solid;transition:all .15s}
+  .morning-alert{display:none;background:rgba(200,37,51,.06);border:1px solid var(--red);border-radius:var(--radius-sm);padding:.6rem .9rem;margin-bottom:.8rem;text-align:center;font-family:'JetBrains Mono',monospace;font-size:.55rem;color:var(--red);font-weight:500;letter-spacing:.04em}
+  .morning-alert.active{display:block}
+  .streak-alarm{background:rgba(200,37,51,.06);border:2px solid var(--red);border-radius:var(--radius-sm);padding:.7rem .9rem;margin-bottom:.8rem;text-align:center;animation:shameBannerPulse 1.8s ease-in-out infinite}
+  .streak-alarm-icon{font-size:1.4rem;margin-bottom:.1rem}
+  .streak-alarm-text{font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:700;color:var(--red);letter-spacing:.04em}
+  .streak-alarm-sub{font-size:.6rem;color:var(--dim);margin:.2rem 0 .5rem}
+  .streak-alarm-nudge{padding:.45rem .8rem;font-size:.6rem}
+  .toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%) translateY(100%);font-family:'JetBrains Mono',monospace;font-size:.55rem;font-weight:600;padding:.55rem 1rem;border-radius:10px;color:#fff;z-index:90;opacity:0;transition:all .3s cubic-bezier(.16,1,.3,1);pointer-events:none;max-width:85%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+  .toast.success{background:var(--accent)}
+  .toast.sos{background:#8b0000}
+  .break-overrun-nudge{margin-top:.5rem;width:100%;font-family:'JetBrains Mono',monospace;font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.5rem;border:2px solid var(--red);background:rgba(200,37,51,.04);color:var(--red);border-radius:var(--radius-sm);cursor:pointer;transition:all .15s}
+  .break-overrun-nudge:active{background:var(--red);color:#fff;transform:scale(.98)}
+  /* ── Design polish ── */
+  .tab-bar{box-shadow:0 1px 4px rgba(0,0,0,.04)}
+  .tab-bar button{transition:all .2s ease}
+  .range-picker button{transition:all .15s ease}
+  .range-picker button:active{transform:scale(.95)}
+  .stat-section{box-shadow:0 1px 4px rgba(0,0,0,.03)}
+  .goal-section{box-shadow:0 1px 6px rgba(0,0,0,.035)}
+  .task-row{font-size:.44rem}
+  .stat-label{font-size:.44rem}
+  .rank-row{gap:.5rem;padding:.15rem 0}
+  .footer{padding-top:.5rem;padding-bottom:env(safe-area-inset-bottom,.3rem)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="conn-banner" id="connBanner"></div>
+  <div class="tab-bar">
+    <button class="active" onclick="switchTab('status',this)">Status</button>
+    <button onclick="switchTab('stats',this)">Statistik</button>
+  </div>
+  <div id="statusView" class="tab-view active">
+  <div class="notif-bar" id="notifBar"><span class="notif-text">Push-Benachrichtigungen?</span><button class="notif-btn" onclick="requestNotifPermission()">Aktivieren</button></div>
+
+  <!-- HERO: Status + Shame integrated -->
+  <div class="status-card idle" id="statusCard">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+      <div class="status-indicator"><div class="status-dot"></div><div class="status-label" id="statusLabel">Verbinde...</div></div>
+      <div class="location-row"><span class="location-icon" id="locIcon">📍</span><span id="locText"></span></div>
+    </div>
+    <div class="task-name" id="taskName">—</div>
+    <div class="timer-display inactive" id="timerDisplay">--:--</div>
+    <div class="timer-end" id="timerEnd"></div>
+    <button class="break-overrun-nudge" id="breakOverrunNudge" style="display:none" onclick="sendNudge(this)">📢 Pause vorbei!</button>
+  </div>
+
+  <div id="lastSessionInfo" style="display:none;font-family:'JetBrains Mono',monospace;font-size:.44rem;color:var(--dim);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.45rem .7rem;margin-bottom:.5rem;align-items:center;gap:.4rem">
+  </div>
+
+  <!-- Shame banner -->
+  <div class="shame-banner" id="shameBanner">
+    <div class="shame-banner-title">💀 Schandzeit</div>
+    <div class="shame-banner-time" id="shameTime">+0:00</div>
+    <div class="shame-banner-sub" id="shameSub"></div>
+    <div class="shame-banner-total" id="shameTotal"></div>
+  </div>
+
+  <div id="sleepPhoneBanner" style="display:none;background:rgba(200,37,51,.08);border:2px solid var(--red);border-radius:var(--radius-sm);padding:.6rem .8rem;margin-bottom:.6rem;text-align:center;animation:shameBannerPulse 1.2s ease-in-out infinite">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:.5rem;font-weight:700;color:var(--red);letter-spacing:.1em">📱 HANDY IN SCHLAFENSZEIT!</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:700;color:var(--red)" id="sleepPhoneTime">0:00</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:.4rem;color:var(--red);opacity:.7;margin-top:.1rem" id="sleepPhoneTotal"></div>
+  </div>
+
+  <!-- Streak alarm -->
+  <div class="streak-alarm" id="streakAlarm" style="display:none">
+    <div class="streak-alarm-icon">🔥</div>
+    <div class="streak-alarm-text"><strong id="streakAlarmDays">0</strong>-Tage-Streak stirbt!</div>
+    <div class="streak-alarm-sub" id="streakAlarmSub">0 Sessions heute</div>
+    <button class="nudge-btn streak-alarm-nudge" onclick="sendNudge(this)">📢 Anstupsen</button>
+  </div>
+
+  <!-- Morning alert -->
+  <div class="morning-alert" id="morningAlert">☀️ Moritz hat heute noch nicht angefangen!</div>
+
+  <!-- ACTIONS: Freiminuten + Nudge (above fold) -->
+  <div class="approval-banner" id="approvalBanner">
+    <div class="approval-text" id="approvalText">💀 Moritz ist idle</div>
+    <div class="section-label">Freiminuten geben</div>
+    <div class="freimin-grid">
+      <button class="freimin-btn" onclick="approveIdle(15,'')">15m</button>
+      <button class="freimin-btn" onclick="approveIdle(30,'')">30m</button>
+      <button class="freimin-btn" onclick="approveIdle(45,'')">45m</button>
+      <button class="freimin-btn" onclick="approveIdle(60,'')">1h</button>
+      <button class="freimin-btn" onclick="approveIdle(90,'')">1.5h</button>
+      <button class="freimin-btn" onclick="approveIdle(120,'')">2h</button>
+    </div>
+    <div class="freimin-custom">
+      <input type="number" id="approveCustomMin" inputmode="numeric" placeholder="Min" min="5" step="5" class="freimin-input">
+      <select id="approveReason" class="freimin-select">
+        <option value="">Grund</option>
+        <option value="Wiebke-Zeit">💑 Wiebke</option>
+        <option value="Autofahren">🚗 Auto</option>
+        <option value="Sonstiges">📋 Sonst.</option>
+      </select>
+      <button class="freimin-btn freimin-ok" onclick="approveCustom()">✓</button>
+    </div>
+    <button class="deny-btn-subtle" onclick="denyIdle()">Nicht genehmigen</button>
+  </div>
+
+  <div class="nudge-section" id="nudgeSection">
+    <div class="nudge-row">
+      <input type="text" id="nudgeText" placeholder="Nachricht..." class="nudge-input">
+      <button class="nudge-btn-compact" id="nudgeBtn" onclick="sendNudge(this)">📢</button>
+      <button class="sos-btn-compact" id="sosBtn" onclick="sendRabbitHoleSOS()">🚨</button>
+    </div>
+  </div>
+
+  <!-- TASK BREAKDOWN -->
+  <div id="taskBreakdown" style="margin-bottom:.4rem;display:none"></div>
+  <div id="allTimeBreakdown" style="margin-bottom:.4rem;display:none"></div>
+
+  <div class="timeline-section" id="timelineSection" style="display:none">
+    <div class="timeline-title">Tagesverlauf</div>
+    <div class="timeline-bar" id="timelineBar"></div>
+    <div class="timeline-hours" id="timelineHours"></div>
+    <div style="display:flex;gap:.6rem;margin-top:.25rem;font-family:'JetBrains Mono',monospace;font-size:.34rem;color:var(--dim2)">
+      <span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--accent);vertical-align:middle"></span> Fokus</span>
+      <span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--blue);vertical-align:middle"></span> Arbeit</span>
+      <span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#6fa3e0;vertical-align:middle"></span> Pause</span>
+      <span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--red-soft);vertical-align:middle"></span> Idle</span>
+    </div>
+  </div>
+
+  <div id="schandmauerStatus" style="margin-bottom:.4rem"></div>
+
+  <div class="goal-section" id="goalSection" style="display:none">
+    <div class="goal-header"><div class="goal-label">Tagesziel</div><div class="goal-value" id="goalValue"><span class="gv">0</span> / 0 min</div></div>
+    <div class="goal-track"><div class="goal-fill under" id="goalFill" style="width:0%"></div><div class="goal-milestone" style="left:25%"></div><div class="goal-milestone" style="left:50%"></div><div class="goal-milestone" style="left:75%"></div></div>
+  </div>
+
+  <!-- DAY BREAKDOWN BAR -->
+  <div id="dayBreakdown" style="margin-bottom:.6rem;display:none"></div>
+
+  <div class="rank-row">
+    <span class="rank-icon" id="rankIcon">⬡</span><span class="rank-name" id="rankName">—</span><span class="rank-xp" id="rankXp"></span>
+    <span class="streak-badge" id="streakBadge" style="display:none">🔥 0</span><span class="shield-badge" id="shieldBadge"></span>
+  </div><!-- rank-row -->
+  </div><!-- statusView -->
+
+  <div id="statsView" class="tab-view">
+    <div class="stat-section">
+      <div class="stat-label">Zeitraum</div>
+      <div class="range-picker" id="rangePicker">
+        <button onclick="setRange('week',this)">7d</button>
+        <button class="active" onclick="setRange('month',this)">30d</button>
+        <button onclick="setRange('quarter',this)">90d</button>
+        <button onclick="setRange('year',this)">1J</button>
+        <button onclick="setRange('all',this)">Gesamt</button>
+      </div>
+    </div>
+    <div class="stat-section">
+      <div class="stat-label">Übersicht</div>
+      <div class="stat-grid" id="statsOverview"></div>
+    </div>
+    <div class="stat-section">
+      <div class="stat-label" id="barChartLabel">Täglicher Verlauf</div>
+      <div class="bar-chart-wrap" id="barChart"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:.2rem">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.38rem;color:var(--yellow);opacity:.7" id="barGoalLabel"></span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.38rem;font-weight:700;color:var(--text)" id="barTotalLabel"></span>
+      </div>
+    </div>
+    <div class="stat-section">
+      <div class="stat-label">Aufgabenverteilung</div>
+      <div class="task-bar" id="statsTaskBar"></div>
+      <div id="statsTaskLegend"></div>
+    </div>
+    <div class="stat-section" id="heatmapSection" style="display:none">
+      <div class="stat-label" id="heatmapLabel">Aktivität (90 Tage)</div>
+      <div class="heatmap-grid" id="heatmapGrid"></div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.38rem;color:var(--dim)" id="heatmapSummary"></div>
+    </div>
+    <div class="stat-section">
+      <div class="stat-label">Produktivität nach Stunde</div>
+      <div class="hour-chart" id="hourChart"></div>
+      <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:.34rem;color:var(--dim)">
+        <span>5</span><span>8</span><span>12</span><span>16</span><span>20</span><span>22</span>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.38rem;color:var(--dim)" id="hourPeak"></div>
+    </div>
+    <div class="stat-section">
+      <div class="stat-label">🏆 Bestleistungen</div>
+      <div class="stat-grid" id="statsBest"></div>
+    </div>
+  </div><!-- statsView -->
+
+  <div class="footer"><div class="last-update" id="lastUpdate">Warte auf Daten...</div></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const FIREBASE_CONFIG={apiKey:"AIzaSyD2JeGbi7sfA3gUrD6aGaTN7qvx4vwjj6g",authDomain:"pomodoro-status.firebaseapp.com",databaseURL:"https://pomodoro-status-default-rtdb.europe-west1.firebasedatabase.app",projectId:"pomodoro-status",storageBucket:"pomodoro-status.firebasestorage.app",messagingSenderId:"809965598837",appId:"1:809965598837:web:0211d4cd6b9fb13e3ba03c"};
+const STATUS_MAP={running:{label:'Fokus-Session'},paused:{label:'Pausiert'},completed:{label:'Fertig!'},break:{label:'Pause'},working:{label:'Bei der Arbeit'},idle:{label:'Wartet'},sleeping:{label:'Schläft 💤'},offline:{label:'Offline'},disconnected:{label:'Fokus · Signal weg'},alarm_grace:{label:'Alarm ignoriert'},reward_grace:{label:'Reward-Phase'},break_expired:{label:'Pause überzogen'}};
+let _timerInterval=null,_shameInterval=null,_lastStatus=null,_lastShameNotifMin=-1,_lastTimestamp=null;
+let _connected=false,_cachedTimerEnd=null,_cachedTask=null,_cachedTaskColor=null,_localTransition=false,_lastNotifTime=0;
+let _fbDb=null;
+
+function init(){
+  updateNotifBar();
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+  showConnBanner('connecting','Lade...');
+  const s1=document.createElement('script');s1.src='https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js';
+  s1.onload=()=>{const s2=document.createElement('script');s2.src='https://www.gstatic.com/firebasejs/10.14.0/firebase-database-compat.js';s2.onload=()=>{
+    const s3=document.createElement('script');s3.src='https://www.gstatic.com/firebasejs/10.14.0/firebase-messaging-compat.js';s3.onload=()=>startFB();s3.onerror=()=>startFB();document.head.appendChild(s3);
+  };s2.onerror=()=>showConnBanner('error','SDK Fehler');document.head.appendChild(s2)};
+  s1.onerror=()=>showConnBanner('error','SDK Fehler');document.head.appendChild(s1);
+}
+function startFB(){
+  try{firebase.initializeApp(FIREBASE_CONFIG);const db=firebase.database();_fbDb=db;const ref=db.ref('status/moritz');
+  db.ref('.info/connected').on('value',s=>{_connected=s.val()===true;_connected?hideConnBanner():showConnBanner('connecting','Verbinde...')});
+  ref.on('value',s=>{const d=s.val();if(!d){showConnBanner('connecting','Keine Daten');return}hideConnBanner();updateUI(d)});
+  // Auto-register FCM if permission already granted
+  if('Notification' in window&&Notification.permission==='granted')setTimeout(registerWiebkeFcm,1000);
+  // Idle approval request listener
+  db.ref('status/moritz/idleApprovalRequest').on('value',s=>{
+    const d=s.val();
+    // Just update text if there's a specific request, banner visibility handled by updateUI
+    if(d&&d.time&&Date.now()-d.time<600000){
+      document.getElementById('approvalText').textContent=d.message||('💀 Moritz: '+(d.idleMin||'?')+' min Schandzeit');
+    }
+  });
+  }catch(e){showConnBanner('error',e.message)}
+}
+function fmtMin(m){if(!m||m<=0)return'\u2014';if(m<60)return m+' min';const h=Math.floor(m/60),r=m%60;return r>0?h+'h '+r+'m':h+'h'}
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function updateUI(data){
+  _lastData=data;
+  const card=document.getElementById('statusCard');
+  let status=data.status||'offline';_localTransition=false;
+  if(status==='running'&&data.timerEnd){_cachedTimerEnd=data.timerEnd;_cachedTask=data.task;_cachedTaskColor=data.taskColor}
+  if(status==='offline'&&_cachedTimerEnd&&_cachedTimerEnd>Date.now()){status='disconnected';if(!data.task&&_cachedTask)data={...data,task:_cachedTask,taskColor:_cachedTaskColor,timerEnd:_cachedTimerEnd};if(!data.timerEnd&&_cachedTimerEnd)data={...data,timerEnd:_cachedTimerEnd}}
+  if(['idle','completed','break','working'].includes(status)){_cachedTimerEnd=null;_cachedTask=null;_cachedTaskColor=null}
+  const info=STATUS_MAP[status]||STATUS_MAP.offline;
+
+  // Notifications
+  const isRL=s=>s==='running'||s==='disconnected';let shouldNotify=false;
+  if(_lastStatus!==null&&_lastStatus!==status&&!(isRL(_lastStatus)&&isRL(status)))shouldNotify=true;
+  if(status==='idle'&&data.isShaming&&data.idleSessionMin!=null){
+    const sm=data.idleSessionMin,iv=sm<10?2:5,th=Math.floor(sm/iv)*iv;
+    if(th>_lastShameNotifMin||(sm<=1&&_lastShameNotifMin<0)){_lastShameNotifMin=th;shouldNotify=true}
+  }else _lastShameNotifMin=-1;
+  if(shouldNotify)sendNotification(data,status);_lastStatus=status;
+
+  card.className='status-card '+status;
+  document.getElementById('statusLabel').textContent=info.label;
+  const taskEl=document.getElementById('taskName');
+  const chainBadge=(data.focusChain||0)>=2?' \uD83D\uDD17'+data.focusChain:'';
+  if(status==='working'){
+    const wkMin=data.todayWorkMinutes||0;
+    taskEl.textContent='\uD83C\uDFE5 Im Spital'+(wkMin>0?' \u00B7 '+fmtMin(wkMin):'');
+    taskEl.style.color='var(--blue)';
+  }
+  else if(status==='sleeping'){
+    const sMin=data.todayMinutes||0;const sCnt=data.todayCount||0;const sDG=data.dailyGoal||120;
+    const dayDone=sMin>=sDG;
+    if(sCnt>0){taskEl.textContent=(dayDone?'\u2705 ':'\uD83C\uDF19 ')+sCnt+'\u00D7 \u00B7 '+fmtMin(sMin)+' / '+sDG+' min';taskEl.style.color=dayDone?'var(--accent)':'var(--yellow)'}
+    else{taskEl.textContent='\uD83C\uDF19 Schlafenszeit';taskEl.style.color='var(--yellow)'}
+  }
+  else if(data.task){taskEl.textContent=data.task+chainBadge;taskEl.style.color=data.taskColor||'var(--text)'}
+  else{taskEl.textContent='\u2014';taskEl.style.color='var(--dim2)'}
+
+  clearInterval(_timerInterval);
+  const timerEl=document.getElementById('timerDisplay'),endEl=document.getElementById('timerEnd');
+  document.getElementById('breakOverrunNudge').style.display='none';
+  if((status==='running'||status==='disconnected')&&data.timerEnd){
+    timerEl.className='timer-display';timerEl.style.color='';const isDc=status==='disconnected';
+    const upd=()=>{const rem=Math.max(0,Math.ceil((data.timerEnd-Date.now())/1000)),m=Math.floor(rem/60),s=rem%60;timerEl.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');if(rem<=0){clearInterval(_timerInterval);_cachedTimerEnd=null;if(isDc){_localTransition=true;card.className='status-card completed';document.getElementById('statusLabel').textContent='Wahrsch. fertig';timerEl.className='timer-display inactive';timerEl.textContent='\u2713';endEl.textContent=''}}};
+    const end=new Date(data.timerEnd);const durSec=(data.duration||25)*60;
+    const updAll=()=>{upd();const remS=Math.max(0,Math.ceil((data.timerEnd-Date.now())/1000));const pct=Math.min(100,Math.round((durSec-remS)/durSec*100));
+      endEl.textContent='fertig um '+end.getHours().toString().padStart(2,'0')+':'+end.getMinutes().toString().padStart(2,'0')+' · '+pct+'%'};
+    updAll();_timerInterval=setInterval(updAll,1000);
+  }else if(status==='break'){timerEl.className='timer-display';timerEl.style.color='var(--blue)';
+    if(data.breakEnd&&data.breakEnd>Date.now()){
+      const tl=data.timeline||[];const lastBreak=tl.filter(e=>e.type==='break').pop();
+      const isMeal=lastBreak&&lastBreak.label&&lastBreak.label.includes('Essen');
+      const isWiebke=lastBreak&&lastBreak.label&&lastBreak.label.includes('Wiebke');
+      document.getElementById('statusLabel').textContent=isWiebke?'🤝 Wiebke-Pause':isMeal?'🍽 Essenspause':'☕ Kurze Pause';
+      const updB=()=>{const rem=Math.max(0,Math.ceil((data.breakEnd-Date.now())/1000)),m=Math.floor(rem/60),s=rem%60;timerEl.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');if(rem<=0){clearInterval(_timerInterval);timerEl.textContent='\u2615 vorbei';timerEl.style.color='var(--red)';endEl.textContent='Pause abgelaufen';document.getElementById('breakOverrunNudge').style.display=''}};
+      updB();_timerInterval=setInterval(updB,1000);
+      const bEnd=new Date(data.breakEnd);endEl.textContent='bis '+bEnd.getHours().toString().padStart(2,'0')+':'+bEnd.getMinutes().toString().padStart(2,'0');
+    }else if(data.breakEnd&&data.breakEnd<=Date.now()){
+      const overMin=Math.round((Date.now()-data.breakEnd)/60000);
+      timerEl.textContent='+'+overMin+' min';timerEl.style.color='var(--red)';
+      endEl.textContent='\u26A0 Pause l\u00E4ngst vorbei!';
+      card.className='status-card idle shaming';
+      document.getElementById('statusLabel').textContent='Pause \u00FCberzogen';
+      document.getElementById('breakOverrunNudge').style.display='';
+    }else{timerEl.textContent='\u2615';endEl.textContent='Kurze Pause';document.getElementById('breakOverrunNudge').style.display='none'}
+  }
+  else if(status==='working'){
+    timerEl.className='timer-display';timerEl.style.color='var(--blue)';
+    if(data.workStart){
+      const upd=()=>{const el=Math.max(0,Math.floor((Date.now()-data.workStart)/1000)),h=Math.floor(el/3600),m=Math.floor((el%3600)/60);timerEl.textContent=h>0?h+'h '+m+'m':m+' min'};
+      upd();_timerInterval=setInterval(upd,10000);
+    }else timerEl.textContent='\uD83C\uDFE5';
+    const wTotal=data.todayWorkMinutes||0;const fDone=data.todayMinutes||0;const dGoal=data.dailyGoal||120;
+    let workSub='Schicht l\u00E4uft';
+    if(fDone>0)workSub+=' \u00B7 '+fDone+'/'+dGoal+' min Fokus';
+    endEl.textContent=workSub;
+  }
+  else if(status==='paused'){timerEl.className='timer-display';timerEl.style.color='';
+    if(data.pausedRemaining){const rem=Math.ceil(data.pausedRemaining/1000),m=Math.floor(rem/60),s=rem%60;timerEl.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}else{timerEl.textContent='\u23F8'}
+    endEl.textContent='\u23F8 pausiert'}
+  else if(status==='sleeping'){
+    timerEl.className='timer-display inactive';timerEl.style.color='var(--yellow)';timerEl.textContent='\uD83C\uDF19';
+    const wakeMin=data.wakeMin!=null?data.wakeMin:320;const wH=Math.floor(wakeMin/60);const wM=wakeMin%60;
+    endEl.textContent='Wecker: '+String(wH).padStart(2,'0')+':'+String(wM).padStart(2,'0');
+  }
+  else if(status==='completed'){timerEl.className='timer-display';timerEl.style.color='var(--green)';timerEl.textContent='\u2713';endEl.textContent='Session fertig!'}
+  else{timerEl.className='timer-display inactive';timerEl.style.color='';timerEl.textContent='--:--';endEl.textContent=''}
+
+  const locI=document.getElementById('locIcon'),locT=document.getElementById('locText');
+  if(status==='working'||data.isAtWork===true){locI.textContent='\uD83C\uDFE5';locT.textContent='Am Arbeitsort'}
+  else if(data.isHome===true){locI.textContent='\uD83C\uDFE0';locT.textContent='Zuhause \u00B7 M\u00E4rwil'}
+  else if(data.isHome===false){locI.textContent='\uD83C\uDF0D';locT.textContent='Unterwegs'}
+  else{locI.textContent='\uD83D\uDCCD';locT.textContent='Unbekannt'}
+
+  // Last session info (show when recent completion, < 60 min ago)
+  const lsEl=document.getElementById('lastSessionInfo');
+  const lastAgoMin=data.lastCompletion?Math.floor((Date.now()-data.lastCompletion)/60000):9999;
+  if(lastAgoMin<60&&status!=='running'&&status!=='sleeping'&&(data.todayCount||0)>0){
+    const dots=['','💀','😐','✓','🔥'];const qDot=dots[data.lastSessionRating||0]||'';
+    const taskName=data.topTask?data.topTask.split(' (')[0]:(data.task||'Session');
+    const agoTxt=lastAgoMin<1?'gerade eben':'vor '+lastAgoMin+' min';
+    lsEl.innerHTML='<span style="color:var(--accent);font-weight:600">Letzte:</span> '+
+      '<span style="color:var(--text)">'+escHtml(taskName)+'</span>'+
+      (qDot?' <span>'+qDot+'</span>':'')+
+      ' <span style="color:var(--dim2);margin-left:auto">'+agoTxt+'</span>';
+    lsEl.style.display='flex';
+  }else{lsEl.style.display='none'}
+
+  // Shame — context-aware
+  const sb=document.getElementById('shameBanner'),isShaming=data.isShaming===true;
+  clearInterval(_shameInterval);sb.style.animation='';
+  if(isShaming&&data.idleSince&&status==='idle'){
+    card.classList.add('shaming');sb.classList.add('active');document.getElementById('statusLabel').textContent='Schandzeit';
+    const wM=data.todayWorkMinutes||0;const dG=data.dailyGoal||120;const fM=data.todayMinutes||0;
+    const lastAgo=data.lastCompletion?Math.floor((Date.now()-data.lastCompletion)/60000):null;
+    const upd=()=>{const el=(Date.now()-data.idleSince)/1000,om=Math.floor(el/60),os=Math.floor(el%60);
+    document.getElementById('shameTime').textContent='+'+om+':'+String(os).padStart(2,'0');
+    // Context line
+    let ctx='';
+    if(wM>0&&fM===0)ctx='\uD83C\uDFE5\u2192\uD83C\uDFE0 Nach '+fmtMin(wM)+' Arbeit: noch keine Session.';
+    else if(lastAgo!=null&&lastAgo>60)ctx='Letzte Session vor '+fmtMin(lastAgo)+'. '+fM+'/'+dG+' min Ziel.'+(wM>0?' \uD83C\uDFE5 '+fmtMin(wM)+' Arbeit.':'');
+    else if(fM===0)ctx='Heute: 0 Sessions. Tagesziel: '+dG+' min.';
+    else ctx=fM+'/'+dG+' min Ziel. '+(data.todayCount||0)+' Sessions.';
+    document.getElementById('shameSub').textContent=ctx;
+    // Total: subtract stale session idle, add live session idle
+    const prevIdle=Math.max(0,(data.todayIdleMinutes||0)-(data.idleSessionMin||0));
+    const t=prevIdle+om;
+    document.getElementById('shameTotal').textContent=t>0?'Heute insgesamt: '+t+' min verschwendet':''};
+    upd();_shameInterval=setInterval(upd,1000);
+  }else{card.classList.remove('shaming');sb.classList.remove('active');
+    if((data.idleMinutes||0)>0&&status==='idle'){sb.classList.add('active');document.getElementById('shameTime').textContent='\uD83D\uDC80';document.getElementById('shameSub').textContent='Heute '+(data.idleMinutes||0)+' min Schandzeit';document.getElementById('shameTotal').textContent='';sb.style.animation='none'}
+  }
+  // Show Freiminuten panel whenever Schandzeit is active (not at work)
+  const approvalEl=document.getElementById('approvalBanner');
+  const atWork=data.isAtWork===true||status==='working';
+  if(isShaming&&status==='idle'&&!atWork){
+    approvalEl.classList.add('active');
+    const idleMin=data.idleSessionMin||Math.floor(((Date.now()-(data.idleSince||Date.now()))/60000));
+    document.getElementById('approvalText').textContent='\uD83D\uDC80 Moritz: '+idleMin+' min Schandzeit';
+  }else{approvalEl.classList.remove('active')}
+  // Nudge/message section: always visible (Wiebke can always send messages)
+  const nudgeSec=document.getElementById('nudgeSection');
+  if(nudgeSec){nudgeSec.style.display='';
+    const inp=document.getElementById('nudgeText');
+    if(inp)inp.placeholder=status==='running'?'Nachricht (stört Fokus)...':status==='sleeping'?'Nachricht (schläft)...':'Nachricht...';
+  }
+
+  // Last session rating dot on task name for completed
+  if(status==='completed'&&data.lastSessionRating>0){
+    const dots=[,'💀','😐','✓','🔥'];
+    document.getElementById('taskName').textContent=(data.completedTask||data.task||'\u2014')+' '+dots[data.lastSessionRating];
+  }
+  if(data.rankIcon)document.getElementById('rankIcon').textContent=data.rankIcon;
+  if(data.rank)document.getElementById('rankName').textContent=data.rank;
+  const _p=data.prestige||0;const _cx=data.cycleXp!=null?data.cycleXp:(data.totalXp||0);
+  document.getElementById('rankXp').textContent=_cx.toLocaleString()+' XP'+(_p>0?' \u00B7 P'+_p:'');
+  const stb=document.getElementById('streakBadge');if(data.streak>1){stb.style.display='';stb.textContent='\uD83D\uDD25 '+data.streak+' Tage'}else stb.style.display='none';
+  document.getElementById('shieldBadge').textContent=(data.shields||0)>0?'\uD83D\uDEE1'.repeat(data.shields):'';
+
+  // Streak alarm: prominent banner when streak is in danger
+  const streakAlarm=document.getElementById('streakAlarm');
+  const streak=data.streak||0;const sessions=data.todayCount||0;const hour=new Date().getHours();
+  if(streak>0&&sessions===0&&hour>=12&&status!=='working'&&!data.isAtWork&&!data.isSleeping){
+    streakAlarm.style.display='';
+    document.getElementById('streakAlarmDays').textContent=streak;
+    streakAlarm.style.borderColor=hour>=18?'#8b0000':'var(--red)';
+    streakAlarm.style.animation=hour>=20?'shameBannerPulse .8s ease-in-out infinite':'shameBannerPulse 1.8s ease-in-out infinite';
+    document.getElementById('streakAlarmSub').textContent=hour>=20?'DRINGEND \u2014 Streak stirbt bald!':hour>=18?'Abend \u2014 noch keine Session!':'0 Sessions heute';
+  }else{streakAlarm.style.display='none'}
+  const goalSec=document.getElementById('goalSection'),tMin=data.todayMinutes||0,dG=data.dailyGoal||0;
+  if(dG>0){goalSec.style.display='';const pct=Math.min(100,(tMin/dG)*100),done=tMin>=dG;
+  document.getElementById('goalValue').innerHTML=done?'<span class="gv gdone">\u2713 '+tMin+'</span> / '+dG+' min':'<span class="gv">'+tMin+'</span> / '+dG+' min';
+  const fill=document.getElementById('goalFill');fill.style.width=pct+'%';fill.className='goal-fill '+(done?'done':'under');
+  document.querySelectorAll('.goal-milestone').forEach(m=>{const mp=parseFloat(m.style.left);m.classList.toggle('hit',tMin>=dG*(mp/100))})}else goalSec.style.display='none';
+
+  _lastTimestamp=data.timestamp||null;renderLastUpdate();
+
+  // Day Breakdown Bar
+  const dbEl=document.getElementById('dayBreakdown');
+  if(dbEl){
+    const wakeMin=data.wakeMin!=null?data.wakeMin:420;
+    const sleepMinCfg=data.sleepMin!=null?data.sleepMin:1320;
+    const sleepDur=((wakeMin-sleepMinCfg)%1440+1440)%1440;
+    const workRaw=data.todayWorkMinutes||0;
+    const focusM=data.todayMinutes||0;
+    const idleM=data.todayIdleMinutes||0;
+    const breakM=data.todayBreakMinutes||0;
+    const workM=Math.max(0,workRaw-focusM); // subtract overlap
+    const freeM=Math.max(0,1440-sleepDur-workM-focusM-breakM-idleM);
+    const segs=[
+      {l:'Schlaf',m:sleepDur,c:'#2A2A40',i:'\uD83D\uDE34'},
+      {l:'Arbeit',m:workM,c:'#3080C0',i:'\uD83C\uDFE5'},
+      {l:'Fokus',m:focusM,c:'var(--accent)',i:'\uD83C\uDFAF'},
+      {l:'Pause',m:breakM,c:'#6FA3E0',i:'\u2615'},
+      {l:'Schandzeit',m:idleM,c:'var(--red)',i:'\uD83D\uDC80'},
+      {l:'Frei',m:freeM,c:'var(--surface-2)',i:''},
+    ].filter(s=>s.m>0);
+    const tot=segs.reduce((a,s)=>a+s.m,0)||1;
+    if(focusM>0||workRaw>0||idleM>0){
+      dbEl.style.display='';
+      dbEl.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.5rem .6rem">'+
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:.42rem;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.35rem">Tagesaufteilung</div>'+
+        '<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;gap:1px;margin-bottom:.4rem">'+
+          segs.map(s=>'<div style="width:'+((s.m/tot)*100)+'%;background:'+s.c+';min-width:2px"></div>').join('')+
+        '</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:.15rem .6rem">'+
+          segs.map(s=>'<div style="display:flex;align-items:center;gap:.2rem;font-family:\'JetBrains Mono\',monospace;font-size:.4rem;color:var(--dim)">'+
+            '<div style="width:6px;height:6px;border-radius:2px;background:'+s.c+';flex-shrink:0"></div>'+
+            (s.i?s.i+' ':'')+fmtMin(s.m)+'</div>').join('')+
+        '</div></div>';
+    }else{dbEl.style.display='none'}
+  }
+
+  // Timeline
+  renderStatusTimeline(data.timeline||[]);
+
+  // Schandmauer (Wall of Shame)
+  const smEl=document.getElementById('schandmauerStatus');
+  const sm=data.schandmauer;
+  if(smEl&&sm&&sm.length>0){
+    const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const last3=sm.slice(-3).reverse();
+    smEl.innerHTML=`<div style="font-family:'JetBrains Mono',monospace;font-size:.5rem;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.2rem;font-weight:600">\uD83D\uDC80 Schandmauer <span style="color:var(--red)">${sm.length}</span></div>`+
+      last3.map(s=>'<div style="font-size:.45rem;color:var(--red);padding:.1rem 0;border-bottom:1px solid rgba(200,37,51,.1)">'+esc(s)+'</div>').join('');
+  }else if(smEl){smEl.innerHTML=''}
+
+  // 2. Day Traffic Light
+  const tbEl=document.getElementById('taskBreakdown');
+  if(tbEl&&data.taskBreakdown&&data.taskBreakdown.length>0){
+    const totalMin=data.taskBreakdown.reduce((a,t)=>a+(t.min||0),0);
+    const totalN=data.taskBreakdown.reduce((a,t)=>a+(t.n||0),0);
+    tbEl.style.display='';
+    tbEl.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.5rem .6rem">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.35rem">'+
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:.42rem;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">Aufgabenverteilung</div>'+
+        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:.42rem;color:var(--dim)">'+totalN+' Ses. · '+fmtMin(totalMin)+'</div>'+
+      '</div>'+
+      '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-bottom:.4rem;gap:1px">'+
+        data.taskBreakdown.map(t=>{
+          const pct=totalMin>0?(t.min/totalMin*100):0;
+          return '<div style="width:'+pct+'%;background:'+(t.color||'#808080')+';min-width:2px"></div>';
+        }).join('')+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:.15rem">'+
+        data.taskBreakdown.map(t=>{
+          const col=t.color||'#808080';
+          const pct=totalMin>0?Math.round(t.min/totalMin*100):0;
+          return '<div style="display:flex;align-items:center;gap:.3rem;font-family:\'JetBrains Mono\',monospace;font-size:.44rem">'+
+            '<div style="width:7px;height:7px;border-radius:2px;background:'+col+';flex-shrink:0"></div>'+
+            '<span style="color:var(--text);flex:1">'+escHtml(t.task)+'</span>'+
+            '<span style="color:var(--dim2)">'+t.n+'×</span>'+
+            '<span style="font-weight:700;color:'+col+';min-width:3rem;text-align:right">'+fmtMin(t.min)+'</span>'+
+            '<span style="color:var(--dim2);font-size:.38rem;min-width:2rem;text-align:right">'+pct+'%</span></div>';
+        }).join('')+
+      '</div>'+
+    '</div>';
+  }else if(tbEl){tbEl.style.display='none'}
+
+  // 3. Week Sparkline
+  // Morning alert
+  // Sleep phone alert
+  const spBanner=document.getElementById('sleepPhoneBanner');
+  if(data.sleepPhoneActive){
+    spBanner.style.display='';
+    const spEl=document.getElementById('sleepPhoneTime');
+    const spTotalEl=document.getElementById('sleepPhoneTotal');
+    const baseEl=data.sleepPhoneElapsedSec||0;
+    const baseTime=Date.now();
+    const tot=data.sleepPhoneTotalSec||0;
+    if(window._spInterval){clearInterval(window._spInterval);window._spInterval=null}
+    const updSp=()=>{const el=baseEl+Math.floor((Date.now()-baseTime)/1000);
+      spEl.textContent=Math.floor(el/60)+':'+String(el%60).padStart(2,'0');
+      if(tot>0){spTotalEl.textContent='Gesamt heute: '+Math.floor(tot/60)+':'+String(tot%60).padStart(2,'0')}else{spTotalEl.textContent=''}};
+    updSp();window._spInterval=setInterval(updSp,1000);
+  }else{spBanner.style.display='none';if(window._spInterval){clearInterval(window._spInterval);window._spInterval=null};
+    document.getElementById('sleepPhoneTotal').textContent=''}
+
+  const ma=document.getElementById('morningAlert');
+  if(data.morningAlert&&(data.todayCount||0)===0&&status!=='working'){ma.classList.add('active')}
+  else{ma.classList.remove('active')}
+  // Update stats tab if visible
+  if(document.getElementById('statsView').classList.contains('active'))renderStats(data);
+}
+
+function renderStatusTimeline(tl){
+  const sec=document.getElementById('timelineSection');
+  const bar=document.getElementById('timelineBar');
+  const hours=document.getElementById('timelineHours');
+  if(!tl||tl.length===0){sec.style.display='none';return}
+  // Ensure time values are numbers (Firebase might return strings)
+  tl=tl.filter(ev=>ev&&ev.type).map(ev=>({...ev,time:Number(ev.time)||0})).filter(ev=>ev.time>0);
+  if(tl.length===0){sec.style.display='none';return}
+  tl.sort((a,b)=>a.time-b.time);
+  sec.style.display='';
+  const first=tl[0].time;const now=Date.now();
+  if(now-first>86400000){sec.style.display='none';return} // older than 24h → stale
+  const dayStart=new Date(first);dayStart.setMinutes(dayStart.getMinutes()-30);
+  const totalMs=Math.max(1,now-dayStart.getTime());
+  const colors={'work-start':'var(--blue)','pomo-start':'var(--accent)','idle-start':'var(--red-soft)','idle-end':'transparent','break':'#6fa3e0','morning':'#4a8fe7','pomo-end':'transparent','work-end':'transparent','snooze':'#9b6dff'};
+  let segs='';
+  for(let i=0;i<tl.length;i++){
+    const ev=tl[i];
+    if(!colors[ev.type]||colors[ev.type]==='transparent')continue;
+    const end=i<tl.length-1?tl[i+1].time:now;
+    const dur=end-ev.time;if(dur<30000)continue;
+    const left=Math.max(0,Math.min(100,(ev.time-dayStart.getTime())/totalMs*100));
+    const width=Math.max(0.5,Math.min(100-left,dur/totalMs*100));
+    const title=(ev.label||ev.type)+' ('+Math.round(dur/60000)+'m)';
+    segs+=`<div class="timeline-seg" title="${title}" style="left:${left}%;width:${width}%;background:${colors[ev.type]}"></div>`;
+  }
+  bar.innerHTML=segs||'<div style="font-size:.4rem;color:var(--dim2);text-align:center;line-height:16px">Noch keine Aktivität</div>';
+  let hHtml='';
+  const startH=dayStart.getHours();const nowH=new Date().getHours();
+  const hourSpan=startH<=nowH?nowH-startH+1:24-startH+nowH+1;
+  for(let i=0;i<hourSpan;i++){
+    const h=(startH+i)%24;
+    const hTime=new Date(dayStart);hTime.setHours(startH+i,0,0,0);if(hTime<dayStart)continue;
+    const pct=(hTime.getTime()-dayStart.getTime())/totalMs*100;
+    if(pct>=0&&pct<=100)hHtml+=`<div class="timeline-hour" style="left:${pct}%">${h}</div>`;
+  }
+  hours.innerHTML=hHtml;
+}
+
+let _toastTimeout=null;
+function showToast(text,cls,ms){
+  clearTimeout(_toastTimeout);
+  const t=document.getElementById('toast');
+  t.textContent=text;t.className='toast '+(cls||'success');
+  requestAnimationFrame(()=>{t.classList.add('show')});
+  _toastTimeout=setTimeout(()=>{t.classList.remove('show');_toastTimeout=null},ms||2500);
+}
+function sendNudge(callerBtn){
+  if(!_fbDb){showToast('Nicht verbunden','sos');return}
+  const btn=callerBtn||document.getElementById('nudgeBtn');
+  const inputEl=document.getElementById('nudgeText');
+  const customText=inputEl?inputEl.value.trim():'';
+  const fallbacks=['Fang an!','Jetzt starten!','Moritz! Los!','Beweg dich!','Pomodoro. Jetzt.','Wiebke ist nicht begeistert.'];
+  const msg=customText||fallbacks[Math.floor(Math.random()*fallbacks.length)];
+  if(btn)btn.disabled=true;
+  _fbDb.ref('status/moritz/nudge').set({time:Date.now(),message:msg,from:'Wiebke'}).then(()=>{
+    if(inputEl)inputEl.value='';
+    showToast('📢 „'+msg+'"','success',2500);
+    setTimeout(()=>{if(btn)btn.disabled=false},2000);
+  }).catch(()=>{showToast('Fehler beim Senden','sos',2000);if(btn)btn.disabled=false});
+}
+
+function sendRabbitHoleSOS(){
+  if(!_fbDb){showToast('Nicht verbunden','sos');return}
+  const btn=document.getElementById('sosBtn');
+  const msgs=['Rabbit Hole erkannt! Sofort aufhören!','Du steckst im Rabbit Hole. STOP.','Wiebke sagt: RAUS aus dem Rabbit Hole!','Rabbit Hole SOS! Pomodoro starten!'];
+  const msg=msgs[Math.floor(Math.random()*msgs.length)];
+  btn.disabled=true;
+  _fbDb.ref('status/moritz/rabbitHole').set({time:Date.now(),message:msg,from:'Wiebke'}).then(()=>{
+    showToast('🚨 SOS gesendet!','sos',3000);
+    setTimeout(()=>{btn.disabled=false},3000);
+  }).catch(()=>{showToast('Fehler beim Senden','sos',2000);btn.disabled=false});
+}
+
+let _approving=false;
+function approveIdle(mins,reason){
+  if(!_fbDb||_approving)return;
+  _approving=true;
+  const btns=document.querySelectorAll('.approve-btn');btns.forEach(b=>b.disabled=true);
+  const r=reason||document.getElementById('approveReason')?.value||'';
+  _fbDb.ref('status/moritz/idleApproval').set({time:Date.now(),approved:true,durationMin:mins,reason:r,from:'Wiebke'}).then(()=>{
+    document.getElementById('approvalBanner').classList.remove('active');
+    _fbDb.ref('status/moritz/idleApprovalRequest').remove().catch(()=>{});
+    showToast('✓ '+mins+' min genehmigt'+(r?' — '+r:''),'success',2500);
+  }).catch(()=>{showToast('Fehler','sos',1500)}).finally(()=>{_approving=false;btns.forEach(b=>b.disabled=false)});
+}
+function approveCustom(){
+  const input=document.getElementById('approveCustomMin');
+  const mins=parseInt(input?.value,10);
+  if(!mins||mins<5){if(input)input.style.borderColor='var(--red)';setTimeout(()=>{if(input)input.style.borderColor=''},800);return}
+  const reason=document.getElementById('approveReason')?.value||'';
+  approveIdle(mins,reason);
+  if(input)input.value='';
+}
+function denyIdle(){
+  if(!_fbDb)return;
+  document.getElementById('approvalBanner').classList.remove('active');
+  _fbDb.ref('status/moritz/idleApprovalRequest').remove().catch(()=>{});
+  // Send nudge as denial
+  sendNudge();
+}
+
+function updateNotifBar(){const b=document.getElementById('notifBar');if(!('Notification' in window)||Notification.permission!=='default')b.classList.add('hidden');else b.classList.remove('hidden')}
+function requestNotifPermission(){if(!('Notification' in window))return;Notification.requestPermission().then(p=>{updateNotifBar();if(p==='granted')registerWiebkeFcm()})}
+
+const FCM_VAPID_KEY='BFEtp_GXC5c0Ktn48qRlp-E2zdAe7pvsdFiMCP3n_EwgIdzSrjWk2g0-5IGjEvxRUoX7GLlougZ515gEX0vti7I';
+function registerWiebkeFcm(){
+  try{
+    if(!firebase.messaging||!_fbDb)return;
+    const messaging=firebase.messaging();
+    navigator.serviceWorker.ready.then(reg=>{
+      messaging.getToken({vapidKey:FCM_VAPID_KEY,serviceWorkerRegistration:reg}).then(token=>{
+        if(token&&_fbDb){_fbDb.ref('status/moritz/wiebkeFcmToken').set(token);console.log('[Wiebke FCM] Token registered')}
+      }).catch(e=>console.warn('[Wiebke FCM] Token error:',e));
+    });
+    // Handle foreground messages (service worker only handles background)
+    messaging.onMessage((payload)=>{
+      console.log('[Wiebke FCM] Foreground message:',payload);
+      const d=(payload.data||payload.notification||{});
+      const title=d.title||'Moritz Status';
+      const body=d.body||'';
+      const tag=d.tag||'wiebke-fg';
+      if('Notification' in window && Notification.permission==='granted'){
+        navigator.serviceWorker.ready.then(reg=>{
+          reg.showNotification(title,{body,icon:'./icon-192.png',badge:'./icon-192.png',tag,renotify:true,vibrate:[300,80,300]});
+        });
+      }
+    });
+  }catch(e){console.warn('[Wiebke FCM] Init error:',e)}
+}
+
+function sendNotification(data,status){
+  if(!('Notification' in window)||Notification.permission!=='granted')return;const now=Date.now();if(now-_lastNotifTime<3000)return;_lastNotifTime=now;
+  let title,body;const task=data.task||'';
+  switch(status){
+    case 'running':title='\u25B6 '+task;body=data.duration+' min gestartet \u00B7 Heute: '+(data.todayMinutes||0)+' min';break;
+    case 'completed':{const qd=['','💀','😐','✓','🔥'][data.lastSessionRating||0]||'';title='\u2705 '+(data.completedTask||task)+' fertig!'+(qd?' '+qd:'');body=(data.completedMinutes||data.duration)+' min \u00B7 #'+(data.todayCount||0)+(data.todayQuality!=null?' \u00B7 Qualit\u00E4t: '+data.todayQuality+'%':'')}break;
+    case 'break':title='\u2615 Pause';body=(data.todayCount||0)+' Sessions, '+(data.todayMinutes||0)+' min heute';break;
+    case 'working':title='\uD83C\uDFE5 Arbeit';body='Moritz ist im Spital angekommen';break;
+    case 'paused':title='\u23F8 '+task+' pausiert';body=data.pausedRemaining?Math.ceil(data.pausedRemaining/60000)+' min \u00FCbrig':'pausiert';break;
+    case 'idle':
+      if(!data.isShaming)return;
+      const sm=data.idleSessionMin||0,total=data.idleMinutes||0;
+      if(sm<=1){title='\uD83D\uDC80 Schandzeit!';body='Moritz macht nichts.'}
+      else{const msgs=['Er prokrastiniert seit '+sm+' min.','Sag ihm Bescheid. '+sm+' min.',sm+' min. Heute: '+total+' min total.','Er sitzt seit '+sm+' min rum.','Moritz. '+sm+' Min. Nichts.','Sag was. '+sm+' min Schandzeit.'];
+      title='\uD83D\uDC80 +'+sm+'m';body=msgs[Math.floor(sm/2)%msgs.length]}break;
+    default:return;
+  }
+  const isS=status==='idle'&&data.isShaming,vib=isS?[400,80,400,80,400,80,600]:undefined;
+  if(navigator.serviceWorker?.controller){navigator.serviceWorker.ready.then(r=>r.showNotification(title,{body,icon:'icon-192.png',badge:'icon-192.png',tag:'moritz-status',renotify:true,requireInteraction:isS,vibrate:vib,silent:status==='paused'})).catch(()=>{try{new Notification(title,{body,icon:'icon-192.png',tag:'moritz-status'})}catch(e){}})}
+  else{try{new Notification(title,{body,icon:'icon-192.png',tag:'moritz-status'})}catch(e){}}
+}
+
+function showConnBanner(t,m){const e=document.getElementById('connBanner');e.className='conn-banner '+t;e.textContent=m}
+function hideConnBanner(){document.getElementById('connBanner').className='conn-banner'}
+function renderLastUpdate(){
+  if(!_lastTimestamp)return;const d=new Date(_lastTimestamp),now=new Date(),dm=Math.floor((now-d)/60000);
+  let ago;if(dm<1)ago='gerade eben';else if(dm<60)ago='vor '+dm+' min';else ago='vor '+Math.floor(dm/60)+' h';
+  const el=document.getElementById('lastUpdate');el.textContent='Aktualisiert '+ago+' \u00B7 '+d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+  const card=document.getElementById('statusCard');
+  if(dm>=5&&!card.classList.contains('disconnected')&&!_localTransition){el.style.color='var(--yellow)';el.textContent+=' \u26A0';if(!card.classList.contains('offline'))card.style.opacity='0.6'}
+  else{el.style.color='';card.style.opacity=''}
+}
+init();setInterval(renderLastUpdate,10000);
+
+// ══════════════════════════════════════════════
+// ── Tab Switching + Stats ──
+// ══════════════════════════════════════════════
+function switchTab(tab,btn){
+  document.querySelectorAll('.tab-view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(tab==='stats'?'statsView':'statusView').classList.add('active');
+  btn.classList.add('active');
+  if(tab==='stats'&&_lastData)renderStats(_lastData);
+}
+let _lastData=null,_selectedRange='month';
+function setRange(r,btn){
+  _selectedRange=r;
+  document.querySelectorAll('.range-picker button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if(_lastData)renderStats(_lastData);
+}
+
+function renderStats(data){
+  const s=data.stats;if(!s)return;
+  const r=s[_selectedRange]||s.month||{};const goal=s.goal||120;
+
+  // Overview
+  const act=r.activeDays||0,tot=r.totalDays||1,tMin=r.totalMin||0,tSes=r.sessions||0;
+  const avgM=act>0?Math.round(tMin/act):0;
+  const avgS=act>0?(tSes/act).toFixed(1):'0';
+  const goalRate=tot>0?Math.round((r.goalMetDays||0)/tot*100):0;
+  const goalColor=goalRate>=80?'green':goalRate>=50?'yellow':'red';
+  const qPct=s.avgQuality||0;const qDot=qPct>=88?'🟢':qPct>=63?'🟡':qPct>=38?'🟠':qPct>0?'🔴':'—';
+
+  const wMin=r.workMin||0;const wDays=r.workDays||0;const avgW=wDays>0?Math.round(wMin/wDays):0;
+  document.getElementById('statsOverview').innerHTML=
+    sc('Fokus',fmtMin(tMin))+sc('Arbeit',fmtMin(wMin),'blue')+sc('Aktive Tage',''+act)+sc('Ø Fokus/Tag',avgM+'m')+
+    sc('Ø Arbeit/Tag',wDays>0?fmtMin(avgW):'—','blue')+sc('Ziel-Rate',goalRate+'%',goalColor)+(qPct>0?sc('Qualität',qDot+' '+qPct+'%'):sc('Sessions',''+tSes));
+
+  // Bar chart: use heatmap90 for daily data, aggregate for weekly
+  const hm=Array.isArray(s.heatmap90)?s.heatmap90:[];
+  const useWeekly=_selectedRange!=='week'&&_selectedRange!=='month';
+  let bars=[];
+  if(!useWeekly){
+    const n=_selectedRange==='week'?7:30;
+    bars=hm.slice(-n);
+    document.getElementById('barChartLabel').textContent='Täglicher Verlauf';
+  }else{
+    // Aggregate heatmap into weeks
+    const src=_selectedRange==='quarter'?hm:hm; // 90 days max from heatmap
+    for(let i=0;i<src.length;i+=7){bars.push(src.slice(i,i+7).reduce((a,b)=>a+(b||0),0))}
+    document.getElementById('barChartLabel').textContent='Wöchentlicher Verlauf'+((_selectedRange==='year'||_selectedRange==='all')?' (letzte 90 Tage)':'');
+  }
+  const goalLine=useWeekly?goal*7:goal;
+  const maxB=Math.max(goalLine,...bars,1);
+  const bc=document.getElementById('barChart');
+  if(bars.length>0&&bars.some(v=>v>0)){
+    let h='<div class="goal-line" style="bottom:'+Math.round(goalLine/maxB*100)+'%"></div>';
+    bars.forEach(v=>{
+      const pct=Math.max(v>0?3:1,Math.round(v/maxB*100));
+      const col=v>=goalLine?'var(--accent)':v>0?'rgba(62,186,111,.5)':'var(--surface-2)';
+      h+='<div class="bar" style="height:'+pct+'%;background:'+col+'"></div>';
+    });
+    bc.innerHTML=h;
+    document.getElementById('barGoalLabel').textContent='— Ziel: '+(useWeekly?goalLine+'m/Wo':goal+'m');
+    document.getElementById('barTotalLabel').textContent='Σ '+fmtMin(bars.reduce((a,b)=>a+(b||0),0));
+  }else{bc.innerHTML='<div style="font-size:.4rem;color:var(--dim2);padding:.5rem">Noch keine Daten</div>'}
+
+  // Task distribution
+  const tb=(_selectedRange==='week'||_selectedRange==='month')?data.taskBreakdown:data.allTimeTaskBreakdown;
+  const tbar=document.getElementById('statsTaskBar');
+  const tleg=document.getElementById('statsTaskLegend');
+  if(tb&&tb.length>0){
+    const tTotal=tb.reduce((a,t)=>a+(t.min||0),0)||1;
+    tbar.innerHTML=tb.map(t=>'<div style="width:'+Math.max(2,t.min/tTotal*100)+'%;background:'+(t.color||'#808080')+'"></div>').join('');
+    tleg.innerHTML=tb.map(t=>{
+      const pct=Math.round((t.min||0)/tTotal*100);
+      return '<div class="task-row"><div class="task-dot" style="background:'+(t.color||'#808080')+'"></div>'+
+        '<span style="flex:1;color:var(--text)">'+escHtml(t.task)+'</span>'+
+        '<span style="color:var(--dim2)">'+(t.n||0)+'×</span>'+
+        '<span style="font-weight:700;color:'+(t.color||'#808080')+';min-width:2.5rem;text-align:right">'+fmtMin(t.min||0)+'</span>'+
+        '<span style="color:var(--dim2);font-size:.36rem;min-width:1.8rem;text-align:right">'+pct+'%</span></div>';
+    }).join('');
+  }else{tbar.innerHTML='';tleg.innerHTML='<div style="font-size:.4rem;color:var(--dim2)">Noch keine Daten</div>'}
+
+  // Heatmap
+  const hmSec=document.getElementById('heatmapSection');
+  if(_selectedRange!=='week'&&hm.length>0&&hm.some(v=>v>0)){
+    hmSec.style.display='';
+    const n=Math.min(_selectedRange==='month'?30:90, hm.length);
+    const slice=hm.slice(-n);
+    const weeks=Math.ceil(n/7);
+    const grid=document.getElementById('heatmapGrid');
+    grid.style.gridTemplateColumns='repeat('+weeks+',1fr)';
+    grid.style.gridTemplateRows='repeat(7,1fr)';
+    let cells='';const actD=slice.filter(v=>v>0).length;const totM=slice.reduce((a,b)=>a+(b||0),0);
+    slice.forEach(m=>{
+      const intensity=m===0?0:m<goal*.25?.2:m<goal*.5?.4:m<goal*.75?.6:m<goal?.8:1;
+      const col=intensity===0?'var(--surface-2)':'rgba(62,186,111,'+(0.15+intensity*0.85)+')';
+      cells+='<div class="heatmap-cell" style="background:'+col+'"></div>';
+    });
+    grid.innerHTML=cells;
+    document.getElementById('heatmapLabel').textContent='🟩 Aktivität ('+n+' Tage)';
+    document.getElementById('heatmapSummary').textContent=actD+' aktive Tage · '+Math.floor(totM/60)+'h '+totM%60+'m total';
+  }else{hmSec.style.display='none'}
+
+  // Hour distribution
+  const hd=Array.isArray(s.hourDist)?s.hourDist:[];
+  const hc=document.getElementById('hourChart');
+  if(hd.length>=24&&hd.some(v=>v>0)){
+    const maxH=Math.max(...hd,1);
+    let hHtml='';
+    for(let h=0;h<24;h++){
+      const v=hd[h]||0;const pct=Math.max(v>0?4:2,Math.round(v/maxH*100));
+      const col=v===0?'var(--surface-2)':h<12?'var(--accent)':'#E8A040';
+      hHtml+='<div class="hour-bar" style="height:'+pct+'%;background:'+col+'" title="'+h+':00 · '+v+' min"></div>';
+    }
+    hc.innerHTML=hHtml;
+    const peakH=hd.indexOf(Math.max(...hd));
+    document.getElementById('hourPeak').textContent='Peak: '+peakH+':00 ('+hd[peakH]+' min) · 🟢 VM · 🟠 NM';
+  }else{hc.innerHTML='<div style="font-size:.4rem;color:var(--dim2)">Keine Daten</div>';document.getElementById('hourPeak').textContent=''}
+
+  // Best performances
+  document.getElementById('statsBest').innerHTML=
+    sc('Bester Tag',(s.bestDay?.min||0)+'m','green')+
+    sc('Längste Session',(s.longestSession||0)+'m')+
+    sc('Beste Woche',fmtMin(s.bestWeek||0))+
+    sc('Längster Streak',(s.longestStreak||0)+'d');
+}
+
+function sc(label,value,color){
+  return '<div class="stat-card"><div class="sv'+(color?' '+color:'')+'">'+value+'</div><div class="sl">'+label+'</div></div>';
+}
+</script>
+</body>
+</html>
